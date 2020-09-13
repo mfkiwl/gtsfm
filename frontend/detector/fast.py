@@ -1,7 +1,7 @@
-"""
-FAST detector implementation.
+"""FAST detector implementation.
 
-The detector was proposed in 'Machine Learning for High-Speed Corner Detection' and is implemented by wrapping over OpenCV's API
+The detector was proposed in 'Machine Learning for High-Speed Corner Detection' 
+and is implemented by wrapping over OpenCV's API
 
 References:
 - https://link.springer.com/chapter/10.1007/11744023_34
@@ -12,18 +12,17 @@ Authors: Ayush Baid
 import cv2 as cv
 import numpy as np
 
-import frontend.utils.feature_utils as feature_utils
-import utils.image_utils as image_utils
+import utils.features as feature_utils
+import utils.images as image_utils
 from common.image import Image
 from frontend.detector.detector_base import DetectorBase
 
 
 class Fast(DetectorBase):
-    """Fast detector using opencv's implementation"""
+    """Fast detector using opencv's implementation."""
 
     def detect(self, image: Image) -> np.ndarray:
-        """
-        Detect the features in an image.
+        """Detect the features in an image.
 
         Refer to the documentation in DetectorBase for more details.
 
@@ -45,6 +44,6 @@ class Fast(DetectorBase):
             cv_keypoints, key=lambda x: x.response, reverse=True)
 
         # convert to numpy array
-        features = feature_utils.array_of_keypoints(cv_keypoints)
+        features = feature_utils.convert_to_numpy_array(cv_keypoints)
 
         return features

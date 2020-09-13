@@ -1,7 +1,8 @@
-"""
-Order-Aware Net verifier implementation.
+"""Order-Aware Net verifier implementation.
 
-The detector was proposed in 'Learning Two-View Correspondences and Geometry Using Order-Aware Network' and is implemented by wrapping over the author's implementation
+The verifier was proposed in 'Learning Two-View Correspondences and Geometry
+Using Order-Aware Network' and is implemented by wrapping over the authors'
+source-code.
 
 References:
 - https://arxiv.org/abs/1908.04964 
@@ -14,22 +15,26 @@ import os
 from collections import namedtuple
 from typing import Tuple
 
-import cv2 as cv
 import numpy as np
 import torch
 
+import utils.verification as verification_utils
 from frontend.verifier.verifier_base import VerifierBase
 from thirdparty.implementation.oanet.core.oan import OANet
 
 
 class OANetVerifier(VerifierBase):
-    """OA-Net verifier."""
+    """OA-Net Verifier."""
 
-    def __init__(self, is_cuda=True):
+    def __init__(self,
+                 is_cuda=True,
+                 post_process_verifier: VerifierBase = None):
         super().__init__(min_pts=8)
 
         is_cuda = is_cuda and torch.cuda.is_available()
         self.device = torch.device("cuda" if is_cuda else "cpu")
+
+        self.post_process_verifier = post_process_verifier
 
         model_path = os.path.abspath(os.path.join(
             'thirdparty', 'models', 'oanet', 'gl3d', 'sift-4000', 'model_best.pth'))
@@ -61,13 +66,14 @@ class OANetVerifier(VerifierBase):
                image_shape_im1: Tuple[int, int],
                image_shape_im2: Tuple[int, int],
                camera_instrinsics_im1: np.ndarray = None,
-               camera_instrinsics_im2: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+               camera_instrinsics_im2: np.ndarray = None
+               ) -> Tuple[np.ndarray, np.ndarray]:
         """Perform the geometric verification of the matched features.
 
         Note:
         1. The number of input features from image #1 and image #2 are equal.
         2. The function computes the fundamental matrix if intrinsics are not
-            provided. Otherwise, it computes the essential matrix.
+           provided. Otherwise, it computes the essential matrix.
 
         Args:
             matched_features_im1 (np.ndarray): matched features from image #1
@@ -81,60 +87,84 @@ class OANetVerifier(VerifierBase):
 
         Returns:
             np.ndarray: estimated fundamental/essential matrix
-            np.ndarray: index of the match features which are verified
+            np.ndarray: index of the input matches which are verified
         """
-
-        if camera_instrinsics_im1 is not None and camera_instrinsics_im2 is not None:
-            raise NotImplementedError(
-                "Degensac for essential matrix is not implemented")
-
-        fundamental_matrix = None
+        geometry_matrix = None
         verified_indices = np.array([], dtype=np.uint32)
 
-        try:
-            if matched_features_im1.shape[0] < self.min_pts:
-                return fundamental_matrix, verified_indices
+        if matched_features_im1.shape[0] < self.min_pts:
+            return geometry_matrix, verified_indices
 
-            features_im1_ = matched_features_im1[:, :2]
-            features_im2_ = matched_features_im2[:, :2]
+        return_fundamental = camera_instrinsics_im1 is None and \
+            camera_instrinsics_im2 is None
 
-            with torch.no_grad():
-                normalized_keypoints = [
-                    torch.from_numpy(self.__normalize_kpts(
-                        features_im1_).astype(np.float32)).to(self.device),
-                    torch.from_numpy(self.__normalize_kpts(
-                        features_im2_).astype(np.float32)).to(self.device)
-                ]
+        if camera_instrinsics_im1 is None:
+            camera_instrinsics_im1 = \
+                verification_utils.intrinsics_from_image_shape(image_shape_im1)
 
-                corr = torch.cat(normalized_keypoints, dim=-1)
+        if camera_instrinsics_im2 is None:
+            camera_instrinsics_im2 = \
+                verification_utils.intrinsics_from_image_shape(image_shape_im2)
 
-                corr = corr.unsqueeze(0).unsqueeze(0)
+        # normalize the features
+        normalized_features_im1 = verification_utils.normalize_coordinates(
+            matched_features_im1[:, :2], camera_instrinsics_im1)[:, :2]
 
-                data = {}
-                data['xs'] = corr
-                data['sides'] = []
+        normalized_features_im2 = verification_utils.normalize_coordinates(
+            matched_features_im2[:, :2], camera_instrinsics_im2)[:, :2]
+        # normalized_features_im1 = matched_features_im1[:, :2]
+        # normalized_features_im2 = matched_features_im2[:, :2]
 
-                y_hat, _ = self.model(data)
-                y = y_hat[-1][0, :].cpu().numpy()
-                verified_indices = np.where(
-                    y > self.default_config['inlier_threshold'])[0].astype(np.uint32)
+        if matched_features_im1.shape[0] < self.min_pts:
+            return geometry_matrix, verified_indices
 
-                # TODO: confirm with John if this is correct
-                if verified_indices.size >= self.min_pts:
-                    inlier_pts1 = features_im1_[verified_indices]
-                    inlier_pts2 = features_im2_[verified_indices]
+        with torch.no_grad():
+            normalized_keypoints = [
+                torch.from_numpy(self.__normalize_kpts(
+                    normalized_features_im1).astype(np.float32)).to(self.device),
+                torch.from_numpy(self.__normalize_kpts(
+                    normalized_features_im2).astype(np.float32)).to(self.device)
+            ]
 
-                    # We have the points as well as the essential matrix estimate; we have to recover the fundamental matrix now
-                    fundamental_matrix, _ = cv.findFundamentalMat(
-                        inlier_pts1, inlier_pts2, method=cv.FM_8POINT
-                    )
+            corr = torch.cat(normalized_keypoints, dim=-1)
+
+            corr = corr.unsqueeze(0).unsqueeze(0)
+
+            data = {}
+            data['xs'] = corr
+            data['sides'] = []
+
+            try:
+                y_hat, e_hat = self.model(data)
+            except RuntimeError as e:
+                if str(e) != 'symeig_cpu: the algorithm failed to converge; 8 off-diagonal elements of an intermediate tridiagonal form did not converge to zero.':
+                    raise
                 else:
-                    verified_indices = np.array([], dtype=np.uint32)
+                    return geometry_matrix, verified_indices
 
-        except Exception as e:
-            print(e)
+            y = y_hat[-1][0, :].cpu().numpy()
+            geometry_matrix = e_hat[-1][0, :].cpu().numpy().reshape(3, 3)
+            verified_indices = np.where(
+                y > self.default_config['inlier_threshold'])[0].astype(
+                    np.uint32)
 
-        return fundamental_matrix, verified_indices
+            if return_fundamental:
+                geometry_matrix = camera_instrinsics_im2.T @ \
+                    geometry_matrix @ camera_instrinsics_im1
+
+        if self.post_process_verifier is not None:
+            geometry_matrix, new_indices = self.post_process_verifier.verify(
+                matched_features_im1[verified_indices],
+                matched_features_im2[verified_indices],
+                image_shape_im1,
+                image_shape_im2,
+                None if return_fundamental else camera_instrinsics_im1,
+                None if return_fundamental else camera_instrinsics_im2
+            )
+
+            verified_indices = verified_indices[new_indices]
+
+        return geometry_matrix, verified_indices
 
     def __normalize_kpts(self, kpts):
         x_mean = np.mean(kpts, axis=0)

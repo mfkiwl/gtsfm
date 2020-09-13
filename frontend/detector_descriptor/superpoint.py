@@ -1,7 +1,9 @@
 """
 Superpoint detector+descriptor implementation
 
-The network was proposed in 'SuperPoint: Self-Supervised Interest Point Detection and Description' and is implemented by wrapping over author's implementation.
+The network was proposed in 'SuperPoint: Self-Supervised Interest Point
+Detection and Description' and is implemented by wrapping over author's
+implementation.
 
 References:
 - https://arxiv.org/abs/1712.07629
@@ -10,26 +12,27 @@ References:
 Authors: Ayush Baid
 """
 
+import os
 from typing import Tuple
 
 import numpy as np
 import torch
 
-import frontend.utils.image_utils as image_utils
+import utils.images as image_utils
 from common.image import Image
 from frontend.detector_descriptor.detector_descriptor_base import \
     DetectorDescriptorBase
 from thirdparty.implementation.superglue.models.superpoint import SuperPoint
 
 
-class SuperPointImplementation(DetectorDescriptorBase):
+class SuperPointDetectorDescriptor(DetectorDescriptorBase):
     """Wrapper around the author's implementation."""
 
     def __init__(self, is_cuda=True):
         """Initialise the configuration and the parameters."""
 
         config = {
-            'weights_path': 'thirdparty/models/superpoint/superpoint_v1.pth'
+            'weights_path': os.path.join('thirdparty', 'models', 'superpoint', 'superpoint_v1.pth')
         }
 
         self.use_cuda = is_cuda and torch.cuda.is_available()
@@ -41,14 +44,14 @@ class SuperPointImplementation(DetectorDescriptorBase):
         """
         Perform feature detection as well as their description in a single step.
 
-        Refer to detect() in BaseDetector and describe() in BaseDescriptor 
+        Refer to detect() in BaseDetector and describe() in BaseDescriptor
         for details about the output format.
 
         Args:
             image (Image): the input image
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]: detected features and their 
+            Tuple[np.ndarray, np.ndarray]: detected features and their
                                            descriptions as two numpy arrays
         """
         image_tensor = torch.from_numpy(
@@ -63,6 +66,6 @@ class SuperPointImplementation(DetectorDescriptorBase):
             (features_points.shape[0], 4), dtype=np.float32)
         detected_features[:, :2] = features_points
         detected_features[:, 3] = scores
-        detected_features[:, 2] = np.NaN
+        detected_features[:, 2] = 1
 
         return detected_features, descriptors

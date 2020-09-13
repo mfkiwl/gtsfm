@@ -13,7 +13,10 @@ class DummyMatcher(MatcherBase):
     Dummy matcher to be used for tests.
     """
 
-    def match(self, descriptors_im1: np.ndarray, descriptors_im2: np.ndarray) -> np.ndarray:
+    def match(self,
+              descriptors_im1: np.ndarray,
+              descriptors_im2: np.ndarray,
+              distance_type: str = 'euclidean') -> np.ndarray:
         """
         Match a pair of descriptors.
 
@@ -22,6 +25,9 @@ class DummyMatcher(MatcherBase):
         Args:
             descriptors_im1 (np.ndarray): descriptors from image #1
             descriptors_im2 (np.ndarray): descriptors from image #2
+            distance_type (str, optional): the space to compute the distance
+                                           between descriptors. Defaults to
+                                           'euclidean'.
 
         Returns:
             np.ndarray: match indices (sorted by confidence)

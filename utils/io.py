@@ -1,11 +1,11 @@
-"""Functions to provide I/O APIs for all the modules.
+"""
+Functions to provide I/O APIs for all the modules
 
 Authors: Ayush Baid
 """
 
 import numpy as np
 from PIL import Image as PILImage
-from PIL.ExifTags import GPSTAGS, TAGS
 
 from common.image import Image
 
@@ -38,11 +38,24 @@ def load_image(img_path: str) -> Image:
 
 
 def save_image(image: Image, img_path: str):
-    """Saves the image to disk
+    """
+    Saves the image to disk
 
     Args:
         image (np.array): image
         img_path (str): the path on disk to save the image to
     """
     im = PILImage.fromarray(image.image_array)
+    im.save(img_path)
+
+
+def save_image_array(image: np.array, img_path: str):
+    """
+    Saves the image to disk
+
+    Args:
+        image (np.array): image
+        img_path (str): the path on disk to save the image to
+    """
+    im = PILImage.fromarray(image)
     im.save(img_path)

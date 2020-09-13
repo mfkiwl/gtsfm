@@ -1,5 +1,5 @@
 """
-Dummy matcher which produces random results.
+Dummy verifier which produces random results (used for testing).
 
 Authors: Ayush Baid
 """
@@ -11,7 +11,7 @@ from frontend.verifier.verifier_base import VerifierBase
 
 
 class DummyVerifier(VerifierBase):
-    """A dummy verifier which produces random results"""
+    """A dummy verifier which produces random results."""
 
     def __init__(self):
         super().__init__(min_pts=8)
@@ -29,7 +29,7 @@ class DummyVerifier(VerifierBase):
         Note:
         1. The number of input features from image #1 and image #2 are equal.
         2. The function computes the fundamental matrix if intrinsics are not
-            provided. Otherwise, it computes the essential matrix.
+           provided. Otherwise, it computes the essential matrix.
 
         Args:
             matched_features_im1 (np.ndarray): matched features from image #1
@@ -42,8 +42,8 @@ class DummyVerifier(VerifierBase):
                 matris for image #2. Default to None
 
         Returns:
-            np.ndarray: random fundamental/essential matrix
-            np.ndarray: index of the match features which are verified
+            np.ndarray: estimated fundamental/essential matrix
+            np.ndarray: index of the input matches which are verified
         """
         fundamental_matrix = None
         verified_indices = np.array([], dtype=np.uint32)
@@ -52,7 +52,16 @@ class DummyVerifier(VerifierBase):
         if matched_features_im1.size <= self.min_pts:
             return fundamental_matrix, verified_indices
 
-        # set a random seed using descriptor data for repeatibility
+        if(np.allclose(matched_features_im1, matched_features_im2)):
+            # we have an the exact points, return everything as verified
+            temp_indices = np.arange(
+                matched_features_im1.shape[0]).reshape(-1, 1)
+
+            verified_indices = np.hstack((temp_indices, temp_indices))
+            # set a random seed using descriptor data for repeatibility
+
+            return np.random.randn(3, 3), verified_indices
+
         np.random.seed(
             int(1000*(matched_features_im1[0, 0] +
                       matched_features_im2[0, 0]) % (2 ^ 32))
