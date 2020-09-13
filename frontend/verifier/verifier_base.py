@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 import dask
 import numpy as np
+from dask.delayed import Delayed
 
 
 class VerifierBase(metaclass=abc.ABCMeta):
@@ -96,39 +97,36 @@ class VerifierBase(metaclass=abc.ABCMeta):
             matched_features_im2[verified_indices]
 
     def create_computation_graph(self,
-                                 matcher_graph: Dict[Tuple[int, int], dask.delayed],
-                                 image_shapes: List[Tuple[int, int]],
-                                 camera_instrinsics: List[np.ndarray] = None
-                                 ) -> Dict[Tuple[int, int], dask.delayed]:
-        """Created the computation graph for verification using the graph 
-        from matcher stage
+                                 matcher_graph: Dict[Tuple[int, int], Delayed],
+                                 image_shape_graph: List[Delayed],
+                                 camera_intrinsics_graph: List[Delayed],
+                                 ) -> Dict[Tuple[int, int], Delayed]:
+        """Creates computation graph for performing verification on results
+        from matcher.
 
         Args:
-            matcher_graph (Dict[Tuple[int, int], dask.delayed]): computation
-                graph from matcher
-            image_shapes (List[Tuple[int, int]]): list of all image shapes
-            camera_instrinsics_im1 (List[np.ndarray], optional): camera
-                intrinsics matrix all images. Defaults to empty list.
+            matcher_graph (Dict[Tuple[int, int], Delayed]): computation graph
+                                                            from matcher
+            loader_graph (List[Delayed]): computation graph from loader
 
         Returns:
-            Dict[Tuple[int, int], dask.delayed]: delayed dask tasks for
-                verification
+            Dict[Tuple[int, int], Delayed]: delayed dask tasks for verificatrion
         """
 
         result = dict()
 
-        def camera_intrinsics_fetcher(
-                idx):
-            return None if camera_instrinsics is None else camera_instrinsics[idx]
+        for image_idx_tuple, matcher_task in matcher_graph.items():
 
-        for image_idx_tuple, delayed_matcher in matcher_graph.items():
+            image_shape_tasks = image_shape_graph[image_idx_tuple]
+            camera_intrinsics_tasks = camera_intrinsics_graph[image_idx_tuple]
+
             result[image_idx_tuple] = dask.delayed(self.verify_and_get_features)(
-                delayed_matcher[0],
-                delayed_matcher[1],
-                image_shapes[image_idx_tuple[0]],
-                image_shapes[image_idx_tuple[1]],
-                camera_intrinsics_fetcher(image_idx_tuple[0]),
-                camera_intrinsics_fetcher(image_idx_tuple[1]),
+                matcher_task[0],
+                matcher_task[1],
+                image_shape_tasks[0],
+                image_shape_tasks[1],
+                camera_intrinsics_tasks[0],
+                camera_intrinsics_tasks[1],
             )
 
         return result

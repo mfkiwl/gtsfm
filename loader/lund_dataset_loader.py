@@ -78,6 +78,27 @@ class LundDatasetLoader(FolderLoader):
 
         return filenames
 
+    def __len__(self) -> int:
+        """
+        Returns the number of images in the folder
+
+        Returns:
+            int: the number of images in the folder
+        """
+        return 5
+
+    def validate_pair(self, idx1: int, idx2: int) -> bool:
+        """Checks if (idx1, idx2) is a valid pair.
+
+        Args:
+            idx1 (int): first index of the pair.
+            idx2 (int): second index of the pair.
+
+        Returns:
+            bool: validation result.
+        """
+        return idx1 < idx2 and idx2 < idx1 + 3
+
 
 if __name__ == '__main__':
     loader = LundDatasetLoader('data/lund/door')

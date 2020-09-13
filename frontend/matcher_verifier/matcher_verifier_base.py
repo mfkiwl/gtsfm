@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 import dask
 import numpy as np
+from dask.delayed import Delayed
 
 
 class MatcherVerifierBase(metaclass=abc.ABCMeta):
@@ -102,35 +103,72 @@ class MatcherVerifierBase(metaclass=abc.ABCMeta):
         return geometry, features_im1[verified_indices[:, 0], :2], \
             features_im2[verified_indices[:, 1], :2]
 
-    def create_computation_graph(self,
-                                 detection_description_graph: List[dask.delayed],
-                                 image_shapes: List[Tuple[int, int]]
-                                 ) -> Dict[Tuple[int, int], dask.delayed]:
-        """
-        Created the computation graph for verification using the graph from matcher stage
+    def create_computation_node(self,
+                                detection_description_node_im1: Delayed,
+                                detection_description_node_im2: Delayed,
+                                shape_node_im1: Delayed,
+                                shape_node_im2: Delayed,
+                                intrinsics_node_im1: Delayed,
+                                intrinsics_node_im2: Delayed
+                                ) -> Delayed:
+        """Create a computation node for processing a pair of image.
 
         Args:
-            matcher_graph (Dict[Tuple[int, int], dask.delayed]): computation graph from matcher
-            image_shapes (List[Tuple[int, int]]): list of all image shapes
+            detection_description_node_im1 (Delayed): [description]
+            detection_description_node_im2 (Delayed): [description]
+            shape_node_im1 (Delayed): [description]
+            shape_node_im2 (Delayed): [description]
+            intrinsics_node_im1 (Delayed): [description]
+            intrinsics_node_im2 (Delayed): [description]
 
         Returns:
-            Dict[Tuple[int, int], dask.delayed]: delayed dask tasks for verification
+            Delayed: [description]
         """
+        return dask.delayed(self.match_and_verify_and_get_features)(
+            detection_description_node_im1[0],
+            detection_description_node_im2[0],
+            detection_description_node_im1[1],
+            detection_description_node_im2[1],
+            shape_node_im1,
+            shape_node_im2,
+            intrinsics_node_im1,
+            intrinsics_node_im2
+        )
 
-        result = dict()
+    def create_computation_graph(self,
+                                 pair_indices: List[Tuple[int, int]],
+                                 detection_description_graph: List[Delayed],
+                                 image_shape_graph: List[Delayed],
+                                 camera_intrinsics_graph: List[Delayed],
+                                 distance_type: str = 'euclidean'
+                                 ) -> Dict[Tuple[int, int], Delayed]:
+        """Create computation graph for the performing matching and verification
+        on results from detector-descriptor.
 
-        num_images = len(detection_description_graph)
+        Args:
+            detection_description_graph (List[Delayed]): computation graph from
+                                                        detector descriptor.
+            loader_graph (List[Delayed]): computation graph from loader.
 
-        for idx1 in range(num_images):
-            for idx2 in range(idx1+1, num_images):
-                graph_component_im1 = detection_description_graph[idx1]
-                graph_component_im2 = detection_description_graph[idx2]
+        Returns:
+            Dict[Tuple[int, int], Delayed]: delayed dask tasks for pairs of
+                                            inputs.
+        """
+        graph = dict()
 
-                result[(idx1, idx2)] = dask.delayed(self.match_and_verify_and_get_features)(
+        for idx1, idx2 in pair_indices:
+
+            graph_component_im1 = detection_description_graph[idx1]
+            graph_component_im2 = detection_description_graph[idx2]
+
+            graph[(idx1, idx2)] = \
+                dask.delayed(self.match_and_verify_and_get_features)(
                     graph_component_im1[0], graph_component_im2[0],
                     graph_component_im1[1], graph_component_im2[1],
-                    image_shapes[idx1],
-                    image_shapes[idx2]
-                )
+                    image_shape_graph[idx1], image_shape_graph[idx2],
+                    camera_intrinsics_graph[idx1],
+                    camera_intrinsics_graph[idx2],
+                    distance_type
+            )
 
-        return result
+        return graph

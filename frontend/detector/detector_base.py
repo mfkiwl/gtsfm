@@ -8,12 +8,16 @@ from typing import List
 
 import dask
 import numpy as np
+from dask.delayed import Delayed
 
 from common.image import Image
 
 
 class DetectorBase(metaclass=abc.ABCMeta):
     """Base class for all the feature detectors."""
+
+    def __init__(self):
+        self.max_features = 5000
 
     @abc.abstractmethod
     def detect(self, image: Image) -> np.ndarray:
@@ -39,14 +43,16 @@ class DetectorBase(metaclass=abc.ABCMeta):
             features (np.ndarray[float]): detected features as a numpy array
         """
 
-    def create_computation_graph(self, loader_graph: List[dask.delayed]) -> List[dask.delayed]:
+    def create_computation_graph(self,
+                                 loader_graph: List[Delayed]
+                                 ) -> List[Delayed]:
         """
         Generates the computation graph for all the entries in the supplied dataset.
 
         Args:
-            loader_graph (List[dask.delayed]): computation graph from loader
+            loader_graph (List[Delayed]): computation graph from loader
 
         Returns:
-            List[dask.delayed]: delayed dask elements
+            List[Delayed]: delayed dask elements
         """
         return [dask.delayed(self.detect)(x) for x in loader_graph]

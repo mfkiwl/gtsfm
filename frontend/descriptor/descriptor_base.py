@@ -8,6 +8,7 @@ from typing import List
 
 import dask
 import numpy as np
+from dask.delayed import Delayed
 
 from common.image import Image
 
@@ -34,16 +35,17 @@ class DescriptorBase(metaclass=abc.ABCMeta):
         """
 
     def create_computation_graph(self,
-                                 loader_graph: List[dask.delayed],
-                                 detection_graph: List[dask.delayed]) -> List[dask.delayed]:
+                                 loader_graph: List[Delayed],
+                                 detection_graph: List[Delayed]
+                                 ) -> List[Delayed]:
         """
         Generates the computation graph to perform description for all the entries in the supplied dataset
 
         Args:
-            loader_graph (List[dask.delayed]): computation graph from loader
-            detection_graph (List[dask.delayed]): computation graph from detector
+            loader_graph (List[Delayed]): computation graph from loader
+            detection_graph (List[Delayed]): computation graph from detector
 
         Returns:
-            List[dask.delayed]: delayed dask elements
+            List[Delayed]: delayed dask elements
         """
         return [dask.delayed(self.describe)(im, feat) for im, feat in zip(loader_graph, detection_graph)]

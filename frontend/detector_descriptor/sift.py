@@ -54,7 +54,7 @@ class SIFTDetectorDescriptor(DetectorDescriptorBase):
         features = feature_utils.convert_to_numpy_array(cv_keypoints)
 
         # sort the features and descriptors by the score
-        sort_idx = np.argsort(-features[:, 3])
+        sort_idx = np.argsort(-features[:, 3])[:self.max_features]
         features = features[sort_idx]
         descriptors = descriptors[sort_idx]
 

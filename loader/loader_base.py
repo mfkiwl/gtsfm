@@ -4,7 +4,7 @@ Authors: Frank Dellaert and Ayush Baid
 """
 
 import abc
-from typing import List
+from typing import List, Tuple
 
 import dask
 import numpy as np
@@ -68,6 +68,18 @@ class LoaderBase(metaclass=abc.ABCMeta):
             np.ndarray: fundamental matrix/homograph matrix
         """
 
+    @abc.abstractmethod
+    def validate_pair(self, idx1: int, idx2: int) -> bool:
+        """Checks if (idx1, idx2) is a valid pair.
+
+        Args:
+            idx1 (int): first index of the pair.
+            idx2 (int): second index of the pair.
+
+        Returns:
+            bool: validation result.
+        """
+
     def delayed_get_image(self, index: int) -> Delayed:
         """
         Wraps the get_image evaluation in a dask.delayed
@@ -80,12 +92,46 @@ class LoaderBase(metaclass=abc.ABCMeta):
         """
         return dask.delayed(self.get_image)(index)
 
-    def create_computation_graph(self) -> List[Delayed]:
-        """
-        Creates the computation graph for all image fetches
+    def image_load_graph(self) -> List[Delayed]:
+        """Creates the computation graph for all image fetches.
 
         Returns:
-           List[Delayed]: list of delayed image loading
+            List[Delayed]: delayed tasks for loading the image
         """
 
-        return [self.delayed_get_image(x) for x in range(self.__len__())]
+        return [dask.delayed(self.get_image)(x) for x in range(self.__len__())]
+
+    def image_shape_graph(self) -> List[Delayed]:
+        """Creates the computation graph for all image shapes
+
+        Returns:
+            List[Delayed]: delayed tasks for loading the image
+        """
+
+        return [(dask.delayed(self.get_image)(x)).shape
+                for x in range(self.__len__())]
+
+    def intrinsics_graph(self) -> List[Delayed]:
+        """Creates the computation graph for camera intrinsics.
+
+        Returns:
+            List[Delayed]: delayed tasks for intrinsics.
+        """
+        N = self.__len__()
+
+        return [dask.delayed(self.get_camera_intrinsics)(x) for x in range(N)]
+
+    def get_valid_pairs(self) -> List[Tuple[int, int]]:
+        """Get the valid pairs of images for this loader.
+
+        Returns:
+            List[Tuple[int, int]]: valid index pairs
+        """
+        indices = []
+
+        for idx1 in range(self.__len__()):
+            for idx2 in range(self.__len__()):
+                if(self.validate_pair(idx1, idx2)):
+                    indices.append((idx1, idx2))
+
+        return indices

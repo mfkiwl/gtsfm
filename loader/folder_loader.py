@@ -154,3 +154,15 @@ class FolderLoader(LoaderBase):
         """
         if self.explicit_extrinsics_paths:
             return np.load(self.explicit_extrinsics_paths[index])
+
+    def validate_pair(self, idx1: int, idx2: int) -> bool:
+        """Checks if (idx1, idx2) is a valid pair.
+
+        Args:
+            idx1 (int): first index of the pair.
+            idx2 (int): second index of the pair.
+
+        Returns:
+            bool: validation result.
+        """
+        return idx1 < idx2

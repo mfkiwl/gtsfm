@@ -8,6 +8,7 @@ from typing import List, Tuple
 
 import dask
 import numpy as np
+from dask.delayed import Delayed
 
 from common.image import Image
 
@@ -18,6 +19,9 @@ class DetectorDescriptorBase(metaclass=abc.ABCMeta):
 
     This class serves as a combination of individual detector and descriptor.
     """
+
+    def __init__(self):
+        self.max_features = 5000
 
     @abc.abstractmethod
     def detect_and_describe(self,
@@ -36,14 +40,18 @@ class DetectorDescriptorBase(metaclass=abc.ABCMeta):
                                            descriptions as two numpy arrays
         """
 
-    def create_computation_graph(self, loader_graph: List[dask.delayed]) -> List[dask.delayed]:
+    def create_computation_graph(self,
+                                 image_load_graph: List[Delayed]
+                                 ) -> List[Delayed]:
         """
         Generates the computation graph for all the entried in the supplied dataset.
 
         Args:
-            loader_graph (List[dask.delayed]): computation graph from loader
+            image_load_graph (List[Delayed]): graph for loading images
 
         Returns:
             List: delayed dask elements for detect_and_describe()
         """
-        return [dask.delayed(self.detect_and_describe)(x) for x in loader_graph]
+        return [
+            dask.delayed(self.detect_and_describe)(x) for x in image_load_graph
+        ]

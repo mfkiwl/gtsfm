@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 import dask
 import numpy as np
+from dask.delayed import Delayed
 
 
 class MatcherBase(metaclass=abc.ABCMeta):
@@ -62,37 +63,39 @@ class MatcherBase(metaclass=abc.ABCMeta):
         Returns:
             Tuple[np.ndarray, np.ndarray]: matched features from each image
         """
-        match_indices = self.match(descriptors_im1, descriptors_im2)
+        match_indices = self.match(
+            descriptors_im1, descriptors_im2, distance_type=distance_type)
 
         return features_im1[match_indices[:, 0], :], features_im2[match_indices[:, 1], :]
 
     def create_computation_graph(self,
-                                 detection_description_graph: List[dask.delayed],
-                                 ) -> Dict[Tuple[int, int], dask.delayed]:
+                                 pair_indices: List[Tuple[int, int]],
+                                 detection_description_graph: List[Delayed],
+                                 distance_type: str = 'euclidean',
+                                 ) -> Dict[Tuple[int, int], Delayed]:
         """
         Generates computation graph for matched features using the detection and description graph.
 
         Args:
-            detection_description_graph (List[dask.delayed]): computation graph for features and
-                                                              their associated descriptors for each image
+            detection_description_graph (List[Delayed]): computation graph
+                                                              for features and
+                                                              their associated descriptors for each image.
 
         Returns:
-            Dict[Tuple[int, int], dask.delayed]: delayed dask tasks for match_and_get_features
-                                                 for each tuple of input indices
+            Dict[Tuple[int, int], Delayed]: delayed dask tasks.
         """
 
-        result = dict()
+        graph = dict()
 
-        num_images = len(detection_description_graph)
+        for idx1, idx2 in pair_indices:
 
-        for idx1 in range(num_images):
-            for idx2 in range(idx1+1, num_images):
-                graph_component_im1 = detection_description_graph[idx1]
-                graph_component_im2 = detection_description_graph[idx2]
+            graph_component_im1 = detection_description_graph[idx1]
+            graph_component_im2 = detection_description_graph[idx2]
 
-                result[(idx1, idx2)] = dask.delayed(self.match_and_get_features)(
-                    graph_component_im1[0], graph_component_im2[0],
-                    graph_component_im1[1], graph_component_im2[1]
-                )
+            graph[(idx1, idx2)] = dask.delayed(self.match_and_get_features)(
+                graph_component_im1[0], graph_component_im2[0],
+                graph_component_im1[1], graph_component_im2[1],
+                distance_type
+            )
 
-        return result
+        return graph

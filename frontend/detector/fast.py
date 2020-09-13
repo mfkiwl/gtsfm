@@ -41,7 +41,8 @@ class Fast(DetectorBase):
 
         # sort the keypoints by score
         cv_keypoints = sorted(
-            cv_keypoints, key=lambda x: x.response, reverse=True)
+            cv_keypoints, key=lambda x: x.response, reverse=True
+        )[:self.max_features]
 
         # convert to numpy array
         features = feature_utils.convert_to_numpy_array(cv_keypoints)
