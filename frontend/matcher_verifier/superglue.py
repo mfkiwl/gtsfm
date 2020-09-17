@@ -1,7 +1,9 @@
-"""
-SuperGlue matcher+verifier implementation
+"""SuperGlue matcher+verifier implementation
 
-The network was proposed in 'SuperGlue: Learning Feature Matching with Graph Neural Networks' and is implemented by wrapping over author's implementation.
+The network was proposed in 'SuperGlue: Learning Feature Matching with Graph
+Neural Networks' and is implemented by wrapping over author's source-code.
+
+Note: the pretrained model only supports superpoint right now.
 
 References:
 - http://openaccess.thecvf.com/content_CVPR_2020/papers/Sarlin_SuperGlue_Learning_Feature_Matching_With_Graph_Neural_Networks_CVPR_2020_paper.pdf
@@ -9,28 +11,30 @@ References:
 
 Authors: Ayush Baid
 """
-
 from typing import Tuple
 
-import cv2 as cv
 import numpy as np
-import pydegensac
 import torch
 
 from frontend.matcher_verifier.matcher_verifier_base import MatcherVerifierBase
-from thirdparty.implementation.superglue.models.superglue import SuperGlue
+from frontend.verifier.simple_verifier import SimpleVerifier
+from frontend.verifier.verifier_base import VerifierBase
+from implementation.superglue.models.superglue import SuperGlue
 
 
-class SuperGlueImplementation(MatcherVerifierBase):
-    """Wrapper around the author's implementation."""
-
+class SuperGlueMatcherVerifier(MatcherVerifierBase):
+    """SuperGlue matcher+verifier implementation."""
     # TODO: handle variable descriptor dimensions
-    def __init__(self, is_cuda=True):
+
+    def __init__(self, is_cuda=True,
+                 post_process_verifier: VerifierBase = SimpleVerifier()):
         """Initialise the configuration and the parameters."""
+
+        self.post_process_verifier = post_process_verifier
 
         config = {
             'descriptor_dim': 256,
-            'weights_path': 'thirdparty/models/superglue/superglue_outdoor.pth'
+            'weights_path': '../models/superglue/superglue_outdoor.pth'
         }
 
         self.use_cuda = is_cuda and torch.cuda.is_available()
@@ -44,28 +48,90 @@ class SuperGlueImplementation(MatcherVerifierBase):
                          descriptors_im1: np.ndarray,
                          descriptors_im2: np.ndarray,
                          image_shape_im1: Tuple[int, int],
-                         image_shape_im2: Tuple[int, int]) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Matches the features (using their corresponding descriptors) to return geometrically verified outlier-free correspondences as indices of input features.
+                         image_shape_im2: Tuple[int, int],
+                         camera_instrinsics_im1: np.ndarray = None,
+                         camera_instrinsics_im2: np.ndarray = None,
+                         distance_type: str = 'euclidean'
+                         ) -> Tuple[np.ndarray, np.ndarray]:
+        """Matches the features (using their corresponding descriptors) to
+        return geometrically verified outlier-free correspondences as indices of
+        input features.
+
+        Note:
+        1. The function computes the fundamental matrix if intrinsics are not
+           provided. Otherwise, it computes the essential matrix.
 
         Args:
             features_im1 (np.ndarray): features from image #1
             features_im2 (np.ndarray): features from image #2
-            descriptors_im1 (np.ndarray): corresponding descriptors from image #1
-            descriptors_im2 (np.ndarray): corresponding descriptors from image #2
+            descriptors_im1 (np.ndarray): corr. descriptors from image #1
+            descriptors_im2 (np.ndarray): corr. descriptors from image #2
             image_shape_im1 (Tuple[int, int]): size of image #1
             image_shape_im2 (Tuple[int, int]): size of image #2
+            camera_instrinsics_im1 (np.ndarray, optional): Camera intrinsics
+                matrix for image #1. Defaults to None.
+            camera_instrinsics_im2 (np.ndarray, optional): Camera intrinsics
+                matris for image #2. Default to None
+            distance_type (str, optional): the space to compute the distance
+                                           between descriptors. Defaults to
+                                           'euclidean'.
 
         Returns:
-            np.ndarray: estimated fundamental matrix
-            np.ndarray: verified correspondences as index of the input features in a Nx2 array
+            np.ndarray: estimated fundamental/essential matrix
+            np.ndarray: index of the input features which are verified (Nx2)
         """
 
-        return self.__compute(features_im1, features_im2, descriptors_im1, descriptors_im2, image_shape_im1, image_shape_im2)[:2]
+        F, indices, _, _ = self.__compute(features_im1,
+                                          features_im2,
+                                          descriptors_im1,
+                                          descriptors_im2,
+                                          image_shape_im1,
+                                          image_shape_im2)[:2]
 
-    def match_and_verify_and_get_features(self, features_im1, features_im2, descriptors_im1, descriptors_im2, image_shape_im1, image_shape_im2):
+        return F, indices
+
+    def match_and_verify_and_get_features(
+            self,
+            features_im1: np.ndarray,
+            features_im2: np.ndarray,
+            descriptors_im1: np.ndarray,
+            descriptors_im2: np.ndarray,
+            image_shape_im1: Tuple[int, int],
+            image_shape_im2: Tuple[int, int],
+            camera_instrinsics_im1: np.ndarray = None,
+            camera_instrinsics_im2: np.ndarray = None,
+            distance_type: str = 'euclidean'):
+        """Calls the match_and_verify function to return actual features
+        instead of indices.
+
+        Args:
+            features_im1 (np.ndarray): features from image #1
+            features_im2 (np.ndarray): features from image #2
+            descriptors_im1 (np.ndarray): corr. descriptors from image #1
+            descriptors_im2 (np.ndarray): corr. descriptors from image #2
+            image_shape_im1 (Tuple[int, int]): size of image #1
+            image_shape_im2 (Tuple[int, int]): size of image #2
+            camera_instrinsics_im1 (np.ndarray, optional): Camera intrinsics
+                matrix for image #1. Defaults to None.
+            camera_instrinsics_im2 (np.ndarray, optional): Camera intrinsics
+                matris for image #2. Default to None
+            distance_type (str, optional): the space to compute the distance
+                                           between descriptors. Defaults to
+                                           'euclidean'.
+
+        Returns:
+            np.ndarray: estimated fundamental/essential matrix
+            np.ndarray: verified features from image #1
+            np.ndarray: corresponding verified features from image #2
+        """
+
         F, _, verified_features_im1, verified_features_im2 = self.__compute(
-            features_im1, features_im2, descriptors_im1, descriptors_im2, image_shape_im1, image_shape_im2
+            features_im1,
+            features_im2,
+            descriptors_im1,
+            descriptors_im2,
+            image_shape_im1,
+            image_shape_im2
         )
 
         return F, verified_features_im1, verified_features_im2
@@ -76,7 +142,8 @@ class SuperGlueImplementation(MatcherVerifierBase):
                   descriptors_im1: np.ndarray,
                   descriptors_im2: np.ndarray,
                   image_shape_im1: Tuple[int, int],
-                  image_shape_im2: Tuple[int, int]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                  image_shape_im2: Tuple[int, int]
+                  ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Common function which performs computations for both the public APIs.
 
@@ -97,7 +164,13 @@ class SuperGlueImplementation(MatcherVerifierBase):
         """
 
         if features_im1.size == 0 or features_im2.size == 0:
-            return None, np.array([], dtype=np.uint32)
+            return None, np.array([], dtype=np.uint32), np.array([]), np.array([])
+
+        if descriptors_im1.size == 0 or \
+                descriptors_im2.size == 0 or \
+                descriptors_im1 is None or \
+                descriptors_im2 is None:
+            return None, np.array([], dtype=np.uint32), np.array([]), np.array([])
 
         if features_im1.shape[1] < 4 or features_im2.shape[1] < 4:
             # we do not have the feature confidence as input
@@ -135,28 +208,15 @@ class SuperGlueImplementation(MatcherVerifierBase):
         verified_features_im1 = features_im1[verified_indices[:, 0], :2]
         verified_features_im2 = features_im2[verified_indices[:, 1], :2]
 
-        # compute the Fundamental matrix using 8-point algorithm
-        if(verified_features_im1.shape[0] < 8):
-            fundamental_matrix = None
-        else:
-            fundamental_matrix, _ = cv.findFundamentalMat(
-                verified_features_im1, verified_features_im2, method=cv.FM_8POINT)
-            # print('MV input points #: {}, {}'.format(
-            #     features_im1.shape[0], features_im2.shape[0]))
-            # print('Ransac input points #: ', verified_features_im1.shape[0])
-            # fundamental_matrix, mask = pydegensac.findFundamentalMatrix(
-            #     verified_features_im1,
-            #     verified_features_im2,
-            #     1.0,
-            #     0.999,
-            #     enable_degeneracy_check=True
-            # )
+        geometry_matrix, inner_inlier_idx = self.post_process_verifier.verify(
+            verified_features_im1,
+            verified_features_im2,
+            image_shape_im1,
+            image_shape_im2,
+            None,
+            None)
 
-            # ransac_inlier_idx = mask.ravel() == 1
-            # verified_indices = verified_indices[ransac_inlier_idx]
-            # verified_features_im1 = verified_features_im1[ransac_inlier_idx]
-            # verified_features_im2 = verified_features_im2[ransac_inlier_idx]
-
-            # print('Ransac output points #: ', verified_features_im1.shape[0])
-
-        return fundamental_matrix, verified_indices, verified_features_im1, verified_features_im2
+        return geometry_matrix, \
+            verified_indices[inner_inlier_idx], \
+            verified_features_im1[inner_inlier_idx], \
+            verified_features_im2[inner_inlier_idx]
