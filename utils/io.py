@@ -6,6 +6,7 @@ Authors: Ayush Baid
 
 import numpy as np
 from PIL import Image as PILImage
+from PIL.ExifTags import GPSTAGS, TAGS
 
 from common.image import Image
 
