@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 import gtsam
 import numpy as np
 from averaging.rotation.rotation_averaging_base import RotationAveragingBase
-from gtsam import BetweenFactorPose3, Pose3, Rot3, ShonanAveraging3
+from gtsam import BetweenFactorPose3, Pose3, Rot3, ShonanAveraging3, ShonanAveragingParameters3
 
 
 class ShonanRotationAveraging(RotationAveragingBase):
@@ -24,10 +24,10 @@ class ShonanRotationAveraging(RotationAveragingBase):
     def __init__(self):
         self._pMin = 5
         self._pMax = 30
-        # lmParams = gtsam.LevenbergMarquardtParams.CeresDefaults()
-        # self._params = ShonanAveragingParameters3(lmParams)
+        lmParams = gtsam.LevenbergMarquardtParams.CeresDefaults()
+        self._params = ShonanAveragingParameters3(lmParams)
 
-        self.noise_model = gtsam.noiseModel.Unit.Create(3)
+        self.noise_model = gtsam.noiseModel.Unit.Create(6)
 
     def run(self,
             num_poses: int,
@@ -43,7 +43,7 @@ class ShonanRotationAveraging(RotationAveragingBase):
             List[Rot3]: global rotations for each camera pose.
         """
 
-        between_factors = []
+        between_factors = gtsam.BetweenFactorPose3s()
 
         for idx_pair, rotation in iRj_dict.items():
             between_factors.append(BetweenFactorPose3(
@@ -53,7 +53,7 @@ class ShonanRotationAveraging(RotationAveragingBase):
                 self.noise_model
             ))
 
-        obj = ShonanAveraging3(between_factors)
+        obj = ShonanAveraging3(between_factors, self._params)
 
         initial = obj.initializeRandomly()
         result_values, _ = obj.run(initial, self._pMin, self._pMax)

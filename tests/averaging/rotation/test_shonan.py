@@ -35,5 +35,7 @@ class TestShonanRotationAveraging(
 
         computed_wRi = self.obj.run(3, iRj_dict)
 
-        for computed_rot, expected_rot in zip(computed_wRi, expected_wRi):
-            self.assertTrue(expected_rot.equals(computed_rot, 1e-5))
+        print(expected_wRi[1])
+        print(computed_wRi[1].between(computed_wRi[0]))
+        self.assertTrue(expected_wRi[1].equals(computed_wRi[1].between(computed_wRi[0]), 1e-5))
+        self.assertTrue(expected_wRi[2].equals(computed_wRi[2].between(computed_wRi[1]), 1e-5))
