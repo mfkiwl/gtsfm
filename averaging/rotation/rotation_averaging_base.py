@@ -25,10 +25,8 @@ class RotationAveragingBase(metaclass=abc.ABCMeta):
         """Run the rotation averaging.
 
         Args:
-            num_poses (int): number of poses.
-            relative_rotations (Dict[Tuple[int, int], Rot3]): relative
-                                                              rotations between
-                                                              camera poses.
+            num_poses: number of poses.
+            relative_rotations: relative rotations between camera poses.
 
         Returns:
             List[Rot3]: global rotations for each camera pose.
@@ -42,9 +40,9 @@ class RotationAveragingBase(metaclass=abc.ABCMeta):
         """Create the computation graph for performing rotation averaging.
 
         Args:
-            num_poses (int): number of poses.
-            relative_rotations (Delayed): the dictionary of relative rotations
-                                          wrapped up in Delayed.
+            num_poses: number of poses.
+            relative_rotations: the dictionary of relative rotations wrapped up 
+                                in Delayed.
 
         Returns:
             Delayed: global rotations wrapped using dask.delayed.

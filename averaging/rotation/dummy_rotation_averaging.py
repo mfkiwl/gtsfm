@@ -20,10 +20,8 @@ class DummyRotationAveraging(RotationAveragingBase):
         """Run the rotation averaging.
 
         Args:
-            num_poses (int): number of poses.
-            relative_rotations (Dict[Tuple[int, int], Rot3]): relative
-                                                              rotations between
-                                                              camera poses.
+            num_poses: number of poses.
+            relative_rotations: relative rotations between camera poses.
 
         Returns:
             List[Rot3]: global rotations for each camera pose.
