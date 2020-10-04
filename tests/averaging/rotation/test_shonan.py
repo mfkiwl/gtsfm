@@ -22,7 +22,7 @@ class TestShonanRotationAveraging(
     def test_simple(self):
         """Test a simple case with just three relative rotations."""
 
-        rotations_iRj = {
+        iRj_dict = {
             (0, 1): Rot3.Rodrigues(0, 30*np.pi/180, 0),
             (1, 2): Rot3.Rodrigues(0, 0, 20*np.pi/180),
         }
@@ -33,7 +33,7 @@ class TestShonanRotationAveraging(
             Rot3.Rodrigues(0, 30*np.pi/180, 20*np.pi/180),
         ]
 
-        computed_wRi = self.obj.run(3, rotations_iRj)
+        computed_wRi = self.obj.run(3, iRj_dict)
 
         for computed_rot, expected_rot in zip(computed_wRi, expected_wRi):
             self.assertTrue(expected_rot.equals(computed_rot, 1e-5))

@@ -31,15 +31,13 @@ class ShonanRotationAveraging(RotationAveragingBase):
 
     def run(self,
             num_poses: int,
-            relative_rotations: Dict[Tuple[int, int], Rot3]
+            iRj_dict: Dict[Tuple[int, int], Rot3]
             ) -> List[Rot3]:
         """Run the rotation averaging.
 
         Args:
-            num_poses (int): number of poses.
-            relative_rotations (Dict[Tuple[int, int], Rot3]): relative
-                                                              rotations between
-                                                              camera poses.
+            num_poses: number of poses.
+            iRj_dict: relative rotations between camera poses (from i to j).
 
         Returns:
             List[Rot3]: global rotations for each camera pose.
@@ -47,7 +45,7 @@ class ShonanRotationAveraging(RotationAveragingBase):
 
         between_factors = []
 
-        for idx_pair, rotation in relative_rotations.items():
+        for idx_pair, rotation in iRj_dict.items():
             between_factors.append(BetweenFactorPose3(
                 idx_pair[0],
                 idx_pair[1],
