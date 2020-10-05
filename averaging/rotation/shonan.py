@@ -46,12 +46,13 @@ class ShonanRotationAveraging(RotationAveragingBase):
         between_factors = gtsam.BetweenFactorPose3s()
 
         for idx_pair, rotation in iRj_dict.items():
-            between_factors.append(BetweenFactorPose3(
-                idx_pair[0],
-                idx_pair[1],
-                Pose3(rotation, np.zeros(3,)),
-                self.noise_model
-            ))
+            if rotation is not None:
+                between_factors.append(BetweenFactorPose3(
+                    idx_pair[0],
+                    idx_pair[1],
+                    Pose3(rotation, np.zeros(3,)),
+                    self.noise_model
+                ))
 
         obj = ShonanAveraging3(between_factors, self._params)
 
