@@ -8,6 +8,7 @@ import unittest
 import dask
 import numpy as np
 
+from dask.delayed import Delayed
 from gtsam import Rot3
 
 from averaging.rotation.dummy_rotation_averaging import DummyRotationAveraging
@@ -27,18 +28,23 @@ class TestRotationAveragingBase(unittest.TestCase):
 
         num_poses = 3
 
-        iRj_dict = {
+        iRj_dict_normal = {
             (0, 1): Rot3.RzRyRx(0, 30*np.pi/180, 0),
             (1, 2): Rot3.RzRyRx(0, 0, 20*np.pi/180),
         }
 
+        iRj_dict_dask = {
+            (0, 1): dask.delayed(Rot3.RzRyRx)(0, 30*np.pi/180, 0),
+            (1, 2): dask.delayed(Rot3.RzRyRx)(0, 0, 20*np.pi/180),
+        }
+
         # use the normal API for rotation averaging
-        normal_result = self.obj.run(num_poses, iRj_dict)
+        normal_result = self.obj.run(num_poses, iRj_dict_normal)
 
         # use dask's computation graph
         computation_graph = self.obj.create_computation_graph(
             num_poses,
-            dask.delayed(iRj_dict)
+            iRj_dict_dask
         )
 
         with dask.config.set(scheduler='single-threaded'):
