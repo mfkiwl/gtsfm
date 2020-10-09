@@ -3,12 +3,11 @@
 Authors: Ayush Baid
 """
 
+import pickle
 import unittest
 
 import dask
 import numpy as np
-
-from dask.delayed import Delayed
 from gtsam import Rot3
 
 from averaging.rotation.dummy_rotation_averaging import DummyRotationAveraging
@@ -54,3 +53,10 @@ class TestRotationAveragingBase(unittest.TestCase):
         for idx in range(1, num_poses):
             self.assertTrue(normal_result[0].between(normal_result[idx]).equals(
                 dask_result[0].between(dask_result[idx]), 1e-5))
+
+    def test_pickleable(self):
+        """Tests that the object is pickleable (required for dask)."""
+        try:
+            pickle.dumps(self.obj)
+        except TypeError:
+            self.fail("Cannot dump rotation averaging object using pickle")
