@@ -3,10 +3,9 @@
 Authors: Jing Wu, Ayush Baid
 """
 import abc
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import dask
-
 from dask.delayed import Delayed
 from gtsam import Rot3
 
@@ -21,7 +20,7 @@ class RotationAveragingBase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def run(self,
             num_poses: int,
-            iRj_dict: Dict[Tuple[int, int], Rot3]
+            iRj_dict: Dict[Tuple[int, int], Union[Rot3, None]]
             ) -> List[Rot3]:
         """Run the rotation averaging.
 
@@ -42,7 +41,7 @@ class RotationAveragingBase(metaclass=abc.ABCMeta):
 
         Args:
             num_poses: number of poses.
-            iRj_graph: the dictionary of relative rotations wrapped up in 
+            iRj_graph: the dictionary of relative rotations wrapped up in
                        Delayed.
 
         Returns:
