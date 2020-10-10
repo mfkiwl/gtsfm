@@ -1,8 +1,9 @@
-from typing import Tuple
+from typing import Tuple, Union
 
 import cv2 as cv
 import gtsam
 import numpy as np
+from gtsam import Rot3, Unit3
 
 import utils.features as feature_utils
 
@@ -96,8 +97,12 @@ def normalize_coordinates(features: np.ndarray,
     """
 
     if features.shape[1] == 2:
-        return feature_utils.convert_to_homogenous(features) @ \
+        temp = feature_utils.convert_to_homogenous(features) @ \
             np.linalg.inv(intrinsics_mat)
+        temp[:, 0] /= temp[:, 2]
+        temp[:, 1] /= temp[:, 2]
+
+        return temp[:, :1]
     elif features.shape[1] == 3:
         return features @ np.linalg.inv(intrinsics_mat)
 
@@ -131,3 +136,88 @@ def relative_pose_from_fundamental_matrix(f_matrix: np.ndarray,
     _, R, t, _ = cv.recoverPose(e_matrix, points1[:, :2], points2[:, :2])
 
     return gtsam.Pose3(gtsam.Rot3(R), gtsam.Point3(t.flatten()))
+
+
+def recover_pose_from_fundamental_matrix(
+    frontend_output: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    camera_intrinsics_im1: np.ndarray,
+    camera_intrinsics_im2: np.ndarray,
+) -> Tuple[Union[Rot3, None], Union[Unit3, None]]:
+    """Recover pose from output of the frontend.
+
+    Args:
+        frontend_output: tuple of F matrix and verified correspondences from
+                         frontend.
+        camera_intrinsics_im1: intrinsics for im1.
+        camera_intrinsics_im2: intrinsics for im2.
+
+    Returns:
+        Union[Rot3, None]: recovered rotation from im1 to im2.
+        Union[Unit3, None]: recovered unit translation from im1 to im2.
+    """
+
+    if frontend_output[0] is None or frontend_output[1] is None:
+        return None
+
+    if frontend_output[0].size == 0 or frontend_output[1].size == 0:
+        return None
+
+    e_matrix = camera_intrinsics_im2.T @ frontend_output[0] @ \
+        camera_intrinsics_im1
+
+    coords_im1 = normalize_coordinates(
+        frontend_output[1][:, :2], camera_intrinsics_im1)
+
+    coords_im2 = normalize_coordinates(
+        frontend_output[2][:, :2], camera_intrinsics_im2)
+
+    # recover the pose using opencv
+    _, R, t, _ = cv.recoverPose(
+        e_matrix,
+        coords_im1,
+        coords_im2,
+        np.eye(3))
+
+    return Rot3(R), Unit3(t)
+
+
+def recover_pose_from_essential_matrix(
+    frontend_output: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    camera_intrinsics_im1: np.ndarray,
+    camera_intrinsics_im2: np.ndarray,
+) -> Tuple[Union[Rot3, None], Union[Unit3, None]]:
+    """Recover pose from output of the frontend.
+
+    Args:
+        frontend_output: tuple of E matrix and verified correspondences from
+                         frontend.
+        camera_intrinsics_im1: intrinsics for im1.
+        camera_intrinsics_im2: intrinsics for im2.
+
+    Returns:
+        Union[Rot3, None]: recovered rotation from im1 to im2.
+        Union[Unit3, None]: recovered unit translation from im1 to im2.
+    """
+
+    if frontend_output[0] is None or frontend_output[1] is None:
+        return None
+
+    if frontend_output[0].size == 0 or frontend_output[1].size == 0:
+        return None
+
+    e_matrix = frontend_output[0]
+
+    coords_im1 = normalize_coordinates(
+        frontend_output[1][:, :2], camera_intrinsics_im1)
+
+    coords_im2 = normalize_coordinates(
+        frontend_output[2][:, :2], camera_intrinsics_im2)
+
+    # recover the pose using opencv
+    _, R, t, _ = cv.recoverPose(
+        e_matrix,
+        coords_im1,
+        coords_im2,
+        np.eye(3))
+
+    return Rot3(R), Unit3(t)
