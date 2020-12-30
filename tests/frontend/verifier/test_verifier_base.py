@@ -23,6 +23,7 @@ from gtsfm.common.keypoints import Keypoints
 from gtsfm.frontend.verifier.dummy_verifier import DummyVerifier
 
 RANDOM_SEED = 15
+ADDITIVE_GAUSSIAN_NOISE_SD = 1e-3
 
 
 class TestVerifierBase(unittest.TestCase):
@@ -39,29 +40,61 @@ class TestVerifierBase(unittest.TestCase):
 
         self.verifier = DummyVerifier()
 
-    def test_simple_scene(self):
-        """Test a simple scene with 8 points, 4 on each plane, so that
+    def verify_scene_with_two_planes(
+        self,
+        num_points_plane1: int,
+        num_points_plane2: int,
+        use_exact_intrinsics: bool,
+        add_noise: bool = False,
+    ) -> bool:
+        """Test a simple scene with points coming from two planes, so that
         RANSAC family of methods do not get trapped into a degenerate sample.
+
+        Args:
+            num_points_plane1: number of points on 1st plane.
+            num_points_plane2: number of points on 2nd plane.
+            use_exact_intrinsics: flag directing use of exact intrinsics.
+            add_noise (optional): add Gaussion noise to the keypoint
+                                  coordinates. Defaults to False.
+
+        Returns:
+            Boolean indicating the recovery of ground truth.
+
         """
         if isinstance(self.verifier, DummyVerifier):
             self.skipTest("Cannot check correctness for dummy verifier")
 
         # obtain the keypoints and the ground truth essential matrix.
         keypoints_i1, keypoints_i2, expected_i2Ei1 = simulate_two_planes_scene(
-            4, 4
+            num_points_plane1, num_points_plane2
         )
+
+        # TODO: add actual tests which use noise
+        if add_noise:
+            keypoints_i1 = Keypoints(
+                keypoints_i1.coordinates
+                + np.random.randn(len(keypoints_i1), 2)
+                * ADDITIVE_GAUSSIAN_NOISE_SD
+            )
+            keypoints_i2 = Keypoints(
+                keypoints_i2.coordinates
+                + np.random.randn(len(keypoints_i2), 2)
+                * ADDITIVE_GAUSSIAN_NOISE_SD
+            )
 
         # match keypoints row by row
         match_indices = np.vstack(
             (np.arange(len(keypoints_i1)), np.arange(len(keypoints_i1)))
         ).T
 
+        fn_to_use = (
+            self.verifier.verify_with_exact_intrinsics
+            if use_exact_intrinsics
+            else self.verifier.verify_with_approximate_intrinsics
+        )
+
         # run the verifier
-        (
-            i2Ri1,
-            i2Ui1,
-            verified_indices,
-        ) = self.verifier.verify_with_approximate_intrinsics(
+        (i2Ri1, i2Ui1, verified_indices,) = fn_to_use(
             keypoints_i1,
             keypoints_i2,
             match_indices,
@@ -69,9 +102,76 @@ class TestVerifierBase(unittest.TestCase):
             Cal3Bundler(),
         )
 
-        self.assertTrue(i2Ri1.equals(expected_i2Ei1.rotation(), 1e-2))
-        self.assertTrue(i2Ui1.equals(expected_i2Ei1.direction(), 1e-2))
-        np.testing.assert_array_equal(verified_indices, match_indices)
+        if i2Ri1 is None or i2Ui1 is None:
+            return False
+
+        return (
+            i2Ri1.equals(expected_i2Ei1.rotation(), 1e-2)
+            and i2Ui1.equals(expected_i2Ei1.direction(), 1e-2)
+            and np.array_equal(verified_indices, match_indices)
+        )
+
+    def test_simple_scene_small(self):
+        """Test a simple scene with 8 points, 4 on each plane."""
+        self.assertTrue(
+            self.verify_scene_with_two_planes(4, 4, use_exact_intrinsics=True)
+        )
+
+        self.assertTrue(
+            self.verify_scene_with_two_planes(4, 4, use_exact_intrinsics=False)
+        )
+
+    def test_simple_scene_medium(self):
+        """Test a simple scene with 20 points, 10 on each plane."""
+        self.assertTrue(
+            self.verify_scene_with_two_planes(10, 10, use_exact_intrinsics=True)
+        )
+
+        self.assertTrue(
+            self.verify_scene_with_two_planes(
+                10, 10, use_exact_intrinsics=False
+            )
+        )
+
+    def test_simple_scene_large(self):
+        """Test a simple scene with 200 points, 100 on each plane."""
+        self.assertTrue(
+            self.verify_scene_with_two_planes(
+                100, 100, use_exact_intrinsics=True
+            )
+        )
+
+        self.assertTrue(
+            self.verify_scene_with_two_planes(
+                100, 100, use_exact_intrinsics=False
+            )
+        )
+
+    def test_lopsided_scene_extralarge(self):
+        """Test a lopsided with 2000 points, 1995 on 1st plane and 5 on 2nd."""
+        self.assertTrue(
+            self.verify_scene_with_two_planes(
+                1995, 5, use_exact_intrinsics=True
+            )
+        )
+
+        self.assertTrue(
+            self.verify_scene_with_two_planes(
+                1995, 5, use_exact_intrinsics=False
+            )
+        )
+
+    def test_planar_scene_large(self):
+        """Test a lopsided with 100 points, all on a plane."""
+        self.assertFalse(
+            self.verify_scene_with_two_planes(100, 0, use_exact_intrinsics=True)
+        )
+
+        self.assertFalse(
+            self.verify_scene_with_two_planes(
+                100, 0, use_exact_intrinsics=False
+            )
+        )
 
     def test_valid_verified_indices(self):
         """Test if valid indices in output."""
@@ -97,9 +197,10 @@ class TestVerifierBase(unittest.TestCase):
                 self.assertTrue(
                     np.all(verified_indices[:, 1] < len(keypoints_i2))
                 )
-            else:
-                # we have a meaningless test
-                self.skipTest("No valid results found")
+
+                return
+
+        self.skipTest("No valid results found")
 
     def test_verify_empty_matches(self):
         """Tests the output when there are no match indices."""
@@ -115,6 +216,22 @@ class TestVerifierBase(unittest.TestCase):
             i2Ui1,
             verified_indices,
         ) = self.verifier.verify_with_exact_intrinsics(
+            keypoints_i1,
+            keypoints_i2,
+            match_indices,
+            intrinsics_i1,
+            intrinsics_i2,
+        )
+
+        self.assertIsNone(i2Ri1)
+        self.assertIsNone(i2Ui1)
+        self.assertEqual(0, verified_indices.size)
+
+        (
+            i2Ri1,
+            i2Ui1,
+            verified_indices,
+        ) = self.verifier.verify_with_approximate_intrinsics(
             keypoints_i1,
             keypoints_i2,
             match_indices,
@@ -295,7 +412,7 @@ def generate_random_input_for_verifier() -> Tuple[
     keypoints_i2 = generate_random_keypoints(num_keypoints_i2, image_shape_i2)
 
     # randomly generate matches
-    num_matches = random.randint(0, min(num_keypoints_i1, num_keypoints_i2))
+    num_matches = random.randint(1, min(num_keypoints_i1, num_keypoints_i2))
     if num_matches == 0:
         matching_indices_i1i2 = np.array([], dtype=np.int32)
     else:
